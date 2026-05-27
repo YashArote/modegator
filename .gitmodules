@@ -1,3 +1,4 @@
 [submodule "website"]
 	path = website
 	url = https://github.com/YashArote/modegator-docs
+	branch = main
