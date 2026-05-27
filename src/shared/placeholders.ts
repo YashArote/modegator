@@ -1,42 +1,42 @@
 import { ActionBlock, EventContext } from './types';
 
-export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): ActionBlock {
-  const replace = (str?: string): string | undefined => {
-    if (!str) return str;
+export function replaceStringPlaceholders(str: string, ctx: EventContext): string {
+  if (!str) return str;
 
-    const now = new Date();
-    const date = now.toISOString().split('T')[0] ?? '';
-    const time = (now.toISOString().split('T')[1] ?? '').substring(0, 5);
+  const now = new Date();
+  const date = now.toISOString().split('T')[0] ?? '';
+  const time = (now.toISOString().split('T')[1] ?? '').substring(0, 5);
 
-    const baseTokens: Record<string, string | undefined> = {
-      'author': ctx.author.username ?? '',
-      'author_name': ctx.author.username ?? '',
-      'post_id': ctx.post?.id ?? '',
-      'post_title': ctx.post?.title ?? '',
-      'post_url': ctx.post?.url ?? '',
-      'post_domain': ctx.post?.domain ?? '',
-      'post_flair': ctx.post?.flairText ?? '',
-      'comment_id': ctx.comment?.id ?? '',
-      'comment_body': (ctx.comment?.body ?? '').substring(0, 500),
-      'subreddit': ctx.subredditName ?? '',
-      'report_reason': ctx.report?.reason ?? '',
-      'date': date,
-      'time': time,
-      'author_karma': String(ctx.author.karma ?? 0),
-      'author_age_days': String(ctx.author.accountAgeDays ?? 0),
-    };
+  const baseTokens: Record<string, string | undefined> = {
+    'author': ctx.author.username ?? '',
+    'author_name': ctx.author.username ?? '',
+    'post_id': ctx.post?.id ?? '',
+    'post_title': ctx.post?.title ?? '',
+    'post_url': ctx.post?.url ?? '',
+    'post_domain': ctx.post?.domain ?? '',
+    'post_flair': ctx.post?.flairText ?? '',
+    'comment_id': ctx.comment?.id ?? '',
+    'comment_body': (ctx.comment?.body ?? '').substring(0, 500),
+    'subreddit': ctx.subredditName ?? '',
+    'report_reason': ctx.report?.reason ?? '',
+    'date': date,
+    'time': time,
+    'author_karma': String(ctx.author.karma ?? 0),
+    'author_age_days': String(ctx.author.accountAgeDays ?? 0),
+  };
 
-    // Find all {{...}} patterns
-    let replaced = str;
-    const matches = replaced.match(/\{\{([^}]+)\}\}/g);
-    
-    if (matches) {
-      for (const match of matches) {
-        // match is e.g. "{{author | lowercase}}"
-        const inner = match.slice(2, -2).trim();
-        const parts = inner.split('|').map(p => p.trim());
-        
-        const tokenKey = parts[0];
+  // Find all {{...}} patterns
+  let replaced = str;
+  const matches = replaced.match(/\{\{([^}]+)\}\}/g);
+  
+  if (matches) {
+    for (const match of matches) {
+      // match is e.g. "{{author | lowercase}}"
+      const inner = match.slice(2, -2).trim();
+      const parts = inner.split('|').map(p => p.trim());
+      
+      const tokenKey = parts[0];
+      if (tokenKey) {
         let val = baseTokens[tokenKey];
         
         if (val !== undefined) {
@@ -52,18 +52,17 @@ export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): Act
         }
       }
     }
+  }
 
-    return replaced;
-  };
+  return replaced;
+}
 
+export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): ActionBlock {
   const newAction = { ...action };
 
   const update = (key: keyof ActionBlock) => {
     if (typeof newAction[key] === 'string') {
-      const res = replace(newAction[key] as string);
-      if (res !== undefined) {
-        (newAction as any)[key] = res;
-      }
+      (newAction as any)[key] = replaceStringPlaceholders(newAction[key] as string, ctx);
     }
   };
 
@@ -80,6 +79,7 @@ export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): Act
   }
   update('key');
   update('domain');
+  update('value');
 
   return newAction;
 }

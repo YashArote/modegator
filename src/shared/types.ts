@@ -26,11 +26,11 @@ export interface UIAction {
   name: string;
   label: string;
   location: 'post' | 'comment' | 'subreddit';
-  for_user_type?: 'moderator' | 'member';
-  confirm?: boolean;
-  confirm_message?: string;
   actions?: ActionBlock[];
   run_macro?: string;
+  for_user_type?: string;
+  confirm?: boolean;
+  confirm_message?: string;
 }
 
 export interface ScheduledTask {
@@ -84,10 +84,6 @@ export interface ActionBlock {
   mod_note?: string;
   message?: string;
 
-  // Mod Note Actions
-  label?: 'ABUSE' | 'BAN' | 'BOT' | 'HELPFUL' | 'PERMA_BAN' | 'SOLID' | 'SPAM' | 'SPAM_WATCH' | 'WARN';
-  note?: string;
-
   // ModMail actions
   internal?: boolean;
   hidden?: boolean;
@@ -98,6 +94,10 @@ export interface ActionBlock {
   body?: string;
   url?: string;
 
+  // Mod notes
+  label?: 'BOT_BAN' | 'PERMA_BAN' | 'BAN' | 'ABUSE_WARNING' | 'SPAM_WARNING' | 'SPAM_WATCH' | 'SOLID_CONTRIBUTOR' | 'HELPFUL_USER';
+  note?: string;
+
   // Storage actions
   key?: string;
   value?: string;
@@ -107,6 +107,7 @@ export interface ActionBlock {
   // Flow control & Timing
   macro?: string;
   duration_ms?: number; // for delay action
+  conditions?: ConditionBlock[]; // for stop_if action
 }
 
 export interface EventContext {
@@ -118,6 +119,10 @@ export interface EventContext {
     accountAgeDays?: number;
     isMod?: boolean;
     isBanned?: boolean;
+    isApproved?: boolean;
+    flairText?: string;
+    hasModNote?: boolean;
+    modNoteLabel?: string;
   };
   post?: {
     id: string;
@@ -128,6 +133,7 @@ export interface EventContext {
     score: number;
     reportCount: number;
     nsfw: boolean;
+    spoiler: boolean;
     flairText: string;
     url?: string;
   };

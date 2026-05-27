@@ -12,7 +12,7 @@ const ALLOWED_ACTIONS = new Set([
 
 const ALLOWED_FIELDS = new Set([
   'author_name', 'author_karma', 'author_age_days', 'author_is_banned', 'author_is_mod', 'author_is_approved', 'author_has_user_flair', 'author_has_mod_note', 'author_mod_note_label',
-  'post_title', 'post_body', 'post_domain', 'post_score', 'post_report_count', 'post_link_type', 'post_is_nsfw', 'post_is_spoiler', 'post_flair_text',
+  'post_title', 'post_body', 'post_domain', 'post_domain_tag', 'post_score', 'post_report_count', 'post_link_type', 'post_is_nsfw', 'post_is_spoiler', 'post_flair_text',
   'comment_body', 'comment_score', 'comment_is_top_level', 'comment_report_count', 'modmail_subject', 'modmail_body', 'modmail_body_length'
 ]);
 
@@ -29,6 +29,7 @@ const FIELD_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
   'post_title': 'string',
   'post_body': 'string',
   'post_domain': 'string',
+  'post_domain_tag': 'string',
   'post_score': 'number',
   'post_report_count': 'number',
   'post_link_type': 'string',
@@ -46,14 +47,14 @@ const FIELD_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
 
 const ALLOWED_RULE_KEYS = new Set(['name', 'trigger', 'conditions', 'actions', 'fallback_actions', 'run_macro']);
 const ALLOWED_TRIGGER_KEYS = new Set(['event']);
-const ALLOWED_UIACTION_KEYS = new Set(['name', 'label', 'location', 'for_user_type', 'confirm', 'confirm_message', 'actions', 'run_macro']);
+const ALLOWED_UIACTION_KEYS = new Set(['name', 'label', 'location', 'actions', 'run_macro', 'for_user_type', 'confirm', 'confirm_message']);
 const ALLOWED_SCHEDULED_KEYS = new Set(['name', 'cron', 'actions', 'run_macro']);
 const ALLOWED_MACRO_KEYS = new Set(['name', 'actions']);
 const ALLOWED_CONDITION_KEYS = new Set(['any_of', 'all_of', 'none_of', 'field', 'operator', 'value']);
 const ALLOWED_ACTION_KEYS = new Set([
   'type', 'spam', 'flair_text', 'flair_css_class', 'text', 'distinguish', 'sticky',
   'duration', 'reason', 'mod_note', 'message', 'label', 'note', 'internal', 'hidden',
-  'to', 'subject', 'body', 'url', 'key', 'value', 'domain', 'color', 'macro', 'duration_ms'
+  'to', 'subject', 'body', 'url', 'key', 'value', 'domain', 'color', 'macro', 'duration_ms', 'conditions'
 ]);
 
 const ALLOWED_OPERATORS = new Set(['==', '!=', '<', '<=', '>', '>=', 'contains', 'regex']);
@@ -144,6 +145,25 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
     if (action.type === 'ban_user' && action.duration !== undefined && action.duration !== 'permanent' && typeof action.duration !== 'number') {
       errors.push(`${prefix}: 'ban_user' duration must be a number or 'permanent'`);
     }
+    if (action.type === 'add_mod_note') {
+      const validLabels = ['BOT_BAN', 'PERMA_BAN', 'BAN', 'ABUSE_WARNING', 'SPAM_WARNING', 'SPAM_WATCH', 'SOLID_CONTRIBUTOR', 'HELPFUL_USER'];
+      if (!action.label || !validLabels.includes(action.label)) {
+        errors.push(`${prefix}: 'add_mod_note' requires 'label' to be one of: ${validLabels.join(', ')}`);
+      }
+    }
+    if (action.type === 'tag_domain') {
+      const validColors = ['red', 'orange', 'yellow', 'green', 'blue', 'gray'];
+      if (action.color && !validColors.includes(action.color)) {
+        errors.push(`${prefix}: 'tag_domain' color must be one of: ${validColors.join(', ')}`);
+      }
+    }
+    if (action.type === 'stop_if' && action.conditions) {
+      if (!Array.isArray(action.conditions)) {
+        errors.push(`${prefix}: 'stop_if' action conditions must be an array`);
+      } else {
+        action.conditions.forEach((c: any, ci: number) => validateCondition(c, `${prefix}.conditions[${ci}]`));
+      }
+    }
   }
 
   function validateCondition(condition: any, prefix: string) {
@@ -173,23 +193,53 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
       errors.push(`${prefix}: Leaf condition missing 'field' (or any_of/all_of/none_of block)`);
       return;
     }
-    if (!ALLOWED_FIELDS.has(condition.field)) {
+    if (!ALLOWED_FIELDS.has(condition.field) && !condition.field.startsWith('counter_') && !condition.field.startsWith('custom_')) {
       errors.push(`${prefix}: Unknown field '${condition.field}'`);
     } else {
-      const expectedType = FIELD_TYPES[condition.field];
-      if (expectedType && typeof condition.value !== expectedType) {
-        errors.push(`${prefix}: Value for '${condition.field}' must be of type '${expectedType}', but got '${typeof condition.value}' (value: ${condition.value})`);
+      let expectedType = FIELD_TYPES[condition.field];
+      if (!expectedType) {
+        if (condition.field.startsWith('counter_')) expectedType = 'number';
+        else if (condition.field.startsWith('custom_')) expectedType = 'string';
+      }
+
+      if (expectedType) {
+        const val = condition.value;
+        if (Array.isArray(val)) {
+          if (val.length > 500) {
+            errors.push(`${prefix}: Condition value array exceeds maximum size of 500 items (got ${val.length} items)`);
+          }
+          if (!['==', '!=', 'contains', 'regex'].includes(condition.operator)) {
+            errors.push(`${prefix}: Operator '${condition.operator}' does not support array values`);
+          } else {
+            for (let idx = 0; idx < Math.min(val.length, 1000); idx++) {
+              if (typeof val[idx] !== expectedType) {
+                errors.push(`${prefix}: Array element at index ${idx} for field '${condition.field}' must be of type '${expectedType}', but got '${typeof val[idx]}' (value: ${val[idx]})`);
+              }
+            }
+          }
+        } else {
+          if (val !== undefined && typeof val !== expectedType) {
+            errors.push(`${prefix}: Value for '${condition.field}' must be of type '${expectedType}', but got '${typeof val}' (value: ${val})`);
+          }
+        }
       }
     }
 
     if (!ALLOWED_OPERATORS.has(condition.operator)) {
       errors.push(`${prefix}: Unknown operator '${condition.operator}' for field '${condition.field}'`);
     } else {
-      if ((condition.operator === '<' || condition.operator === '<=' || condition.operator === '>' || condition.operator === '>=') && typeof condition.value !== 'number') {
-        errors.push(`${prefix}: Operator '${condition.operator}' requires a number value`);
-      }
-      if ((condition.operator === 'contains' || condition.operator === 'regex') && typeof condition.value !== 'string') {
-        errors.push(`${prefix}: Operator '${condition.operator}' requires a string value`);
+      const val = condition.value;
+      if (!Array.isArray(val)) {
+        if ((condition.operator === '<' || condition.operator === '<=' || condition.operator === '>' || condition.operator === '>=') && typeof val !== 'number') {
+          errors.push(`${prefix}: Operator '${condition.operator}' requires a number value`);
+        }
+        if ((condition.operator === 'contains' || condition.operator === 'regex') && typeof val !== 'string') {
+          errors.push(`${prefix}: Operator '${condition.operator}' requires a string value`);
+        }
+      } else {
+        if (condition.operator === '<' || condition.operator === '<=' || condition.operator === '>' || condition.operator === '>=') {
+          errors.push(`${prefix}: Operator '${condition.operator}' does not support array values`);
+        }
       }
     }
 
@@ -200,6 +250,12 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
 
   for (const [filename, content] of Object.entries(files)) {
     if (!content.trim()) continue;
+
+    // Check size limit: reject files larger than 100 KB
+    if (content.length > 100 * 1024) {
+      errors.push(`[${filename}]: Configuration file exceeds the maximum size limit of 100 KB`);
+      continue;
+    }
 
     try {
       const parsed = YAML.parse(content);
@@ -262,6 +318,22 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
           } else {
             seenNames.ui_actions.add(action.name);
             merged.ui_actions.push(action);
+          }
+          
+          if (action.location && !['post', 'comment', 'subreddit'].includes(action.location)) {
+            errors.push(`${prefix}: 'location' must be one of: 'post', 'comment', 'subreddit'`);
+          }
+
+          if (action.for_user_type !== undefined && typeof action.for_user_type !== 'string') {
+            errors.push(`${prefix}: 'for_user_type' must be a string`);
+          }
+
+          if (action.confirm !== undefined && typeof action.confirm !== 'boolean') {
+            errors.push(`${prefix}: 'confirm' must be a boolean`);
+          }
+
+          if (action.confirm_message !== undefined && typeof action.confirm_message !== 'string') {
+            errors.push(`${prefix}: 'confirm_message' must be a string`);
           }
 
           if (action.actions && Array.isArray(action.actions)) {

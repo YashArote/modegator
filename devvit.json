@@ -1,11 +1,17 @@
 {
-  "name": "modgator",
+  "name": "modegator",
   "permissions": {
     "reddit": true,
     "redis": true,
     "http": {
+      "enable": true,
       "domains": [
-        "api.github.com"
+        "api.github.com",
+        "discord.com",
+        "discordapp.com",
+        "hooks.slack.com",
+        "slack.com",
+        "webhook.site"
       ]
     }
   },
@@ -19,7 +25,7 @@
     }
   },
   "dev": {
-    "subreddit": "modgator_dev"
+    "subreddit": "modegator_dev"
   },
   "server": {
     "dir": "dist/server",
@@ -28,19 +34,19 @@
   "menu": {
     "items": [
       {
-        "label": "Open MG Dashboard",
+        "label": "🛡️Open MG Dashboard",
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/dashboard"
       },
       {
-        "label": "MG Actions",
+        "label": "🛡️ MG Actions",
         "location": "post",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/post-actions"
       },
       {
-        "label": "MG Actions",
+        "label": "🛡️ MG Actions",
         "location": "comment",
         "forUserType": "moderator",
         "endpoint": "/internal/menu/comment-actions"

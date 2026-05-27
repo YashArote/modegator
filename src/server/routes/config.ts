@@ -13,12 +13,31 @@ export const configRoutes = new Hono();
 configRoutes.get('/', async (c) => {
   const filesRecord = await redis.hGetAll(KEYS.CONFIG_FILES);
   const parsed = await redis.get(KEYS.CONFIG_PARSED);
-  
+
   // Backwards compatibility fallback if hash is empty but string exists
   if (Object.keys(filesRecord).length === 0) {
     const legacyYaml = await redis.get(KEYS.CONFIG_YAML);
     if (legacyYaml) {
       filesRecord['legacy_config.yml'] = legacyYaml;
+    } else {
+      // FRESH INSTALL - Seed with built-in templates
+      for (const [name, content] of Object.entries(BUILT_IN_TEMPLATES)) {
+        const filename = name.toLowerCase().replace(/[^a-z0-9_]/g, '_') + '.yml';
+        filesRecord[filename] = content;
+      }
+      
+      const result = validateAndMergeFiles(filesRecord);
+      if (result.valid) {
+        await redis.hSet(KEYS.CONFIG_FILES, filesRecord);
+        await redis.set(KEYS.CONFIG_PARSED, JSON.stringify(result.merged));
+        await syncScheduledTasks(result.merged);
+        
+        return c.json({
+          files: filesRecord,
+          parsed: result.merged,
+          hasConfig: true,
+        });
+      }
     }
   }
 
@@ -32,7 +51,7 @@ configRoutes.get('/', async (c) => {
 // POST /api/config — validate and save new files
 configRoutes.post('/', async (c) => {
   const { files } = await c.req.json<{ files: Record<string, string> }>();
-  
+
   const result = validateAndMergeFiles(files);
   if (!result.valid) {
     return c.json({ success: false, errors: result.errors }, 400);
@@ -59,7 +78,7 @@ configRoutes.post('/', async (c) => {
 
   await redis.hSet(KEYS.CONFIG_FILES, record);
   await redis.set(KEYS.CONFIG_PARSED, JSON.stringify(result.merged));
-    
+
   // Synchronize scheduled cron tasks with Devvit API
   await syncScheduledTasks(result.merged);
 

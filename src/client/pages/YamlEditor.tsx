@@ -102,7 +102,7 @@ export function YamlEditor() {
         localErrors.push(`File missing name: Ensure each file has a "name:" property.`);
         continue;
       }
-      
+
       let name = match[1].trim().replace(/['"]/g, '');
       if (!name.endsWith('.yml')) name += '.yml';
 
@@ -110,7 +110,7 @@ export function YamlEditor() {
         localErrors.push(`Duplicate file name: Multiple files are named "${name}". Each file must have a unique name.`);
         continue;
       }
-      
+
       payload[name] = f.code;
     }
 
@@ -125,13 +125,13 @@ export function YamlEditor() {
     } else {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
-      
+
       const newFiles = filesToSave.map(f => ({
         id: getDisplayName(f.code, f.id),
         code: f.code
       }));
       setFiles(newFiles);
-      
+
       if (activeId) {
         const currentlyActive = filesToSave.find(f => f.id === activeId);
         if (currentlyActive) {
@@ -144,13 +144,13 @@ export function YamlEditor() {
   const handleLoadTemplate = (templateName: string) => {
     if (!templateName || !activeId) return;
     const newCode = templates[templateName] ?? '';
-    
+
     // Use native commands so that this action is captured in the native undo stack
     const ta = document.querySelector('.textarea-code') as HTMLTextAreaElement;
     if (ta) {
       ta.focus();
       ta.select();
-      
+
       // If the template is empty or browsers block insertText, this is a fallback
       const success = document.execCommand('insertText', false, newCode);
       if (!success) {
@@ -243,7 +243,7 @@ export function YamlEditor() {
 
   return (
     <div className="yaml-editor" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '16px' }}>
-      
+
       <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 0, padding: '12px 16px' }}>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button onClick={() => setSidebarVisible(!sidebarVisible)} className="btn btn-outline btn-sm" style={{ padding: '6px' }} aria-label="Toggle Sidebar">
@@ -261,16 +261,15 @@ export function YamlEditor() {
               )}
             </svg>
           </button>
-          
           <button className="btn btn-outline btn-sm" onClick={handleExport} title="Copy Export JSON to Clipboard" style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </button>
-          
-          <label className="btn btn-outline btn-sm" title="Import JSON config" style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: 0 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </button>
+
+          <label className="btn btn-outline btn-sm" title="Import JSON config" style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
           </label>
-          
+
           <select onChange={(e) => handleLoadTemplate(e.target.value)} value="" style={{ maxWidth: '200px', padding: '6px 12px' }}>
             <option value="" disabled>Load Template...</option>
             {Object.keys(templates).map(name => (
@@ -278,7 +277,7 @@ export function YamlEditor() {
             ))}
           </select>
         </div>
-        
+
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {success && (
             <span className="badge badge-success" style={{ animation: 'fadeIn 0.3s ease-out', marginRight: '4px' }}>
@@ -309,7 +308,7 @@ export function YamlEditor() {
       )}
 
       <div style={{ display: 'flex', flex: 1, gap: '16px', minHeight: '500px' }}>
-        
+
         {/* Sidebar File Explorer */}
         {sidebarVisible && (
           <div className="card" style={{ width: '220px', display: 'flex', flexDirection: 'column', padding: 0, marginBottom: 0, transition: 'width 0.2s' }}>
@@ -321,11 +320,11 @@ export function YamlEditor() {
               {files.map(f => {
                 const displayName = getDisplayName(f.code, f.id);
                 return (
-                  <div 
+                  <div
                     key={f.id}
                     onClick={() => setActiveId(f.id)}
-                    style={{ 
-                      padding: '10px 16px', 
+                    style={{
+                      padding: '10px 16px',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -338,14 +337,14 @@ export function YamlEditor() {
                     }}
                   >
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
-                    <button 
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteFile(f.id); }}
-                      style={{ 
-                        background: deleteConfirmId === f.id ? 'var(--r-danger)' : 'none', 
-                        border: 'none', 
+                      style={{
+                        background: deleteConfirmId === f.id ? 'var(--r-danger)' : 'none',
+                        border: 'none',
                         borderRadius: '4px',
-                        color: deleteConfirmId === f.id ? 'white' : 'var(--r-danger)', 
-                        cursor: 'pointer', 
+                        color: deleteConfirmId === f.id ? 'white' : 'var(--r-danger)',
+                        cursor: 'pointer',
                         opacity: (activeId === f.id || deleteConfirmId === f.id) ? 1 : 0,
                         padding: deleteConfirmId === f.id ? '2px 6px' : '2px',
                         fontSize: deleteConfirmId === f.id ? '10px' : '14px',
@@ -382,10 +381,9 @@ export function YamlEditor() {
           />
         </div>
       </div>
-      
+
       <div className="help-links" style={{ marginTop: 0 }}>
-        <a href="https://developers.reddit.com/docs/event_triggers" target="_blank">Triggers Reference</a> ·{' '}
-        <a href="https://www.reddit.com/wiki/automoderator/full-documentation" target="_blank">AutoModerator Docs</a>
+        <a href="https://modegator.netlify.app/" target="_blank">Modegator Documentation</a>
       </div>
     </div>
   );

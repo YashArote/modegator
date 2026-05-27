@@ -2,19 +2,19 @@ import type { ActionBlock, ConditionBlock, RuleBlock, ScheduledTask, UIAction } 
 
 // Map specific fields to English equivalents if necessary
 const fieldNameMap: Record<string, string> = {
-  'author.karma': "author's karma",
-  'author.accountAgeDays': "author's account age (in days)",
-  'author.isMod': 'is a moderator',
-  'author.isBanned': 'is banned',
-  'post.title': "post's title",
-  'post.body': "post's body",
-  'post.score': "post's score",
-  'post.reportCount': "post's report count",
-  'post.nsfw': 'is marked NSFW',
-  'comment.body': "comment's body",
-  'comment.score': "comment's score",
-  'comment.reportCount': "comment's report count",
-  'comment.isTopLevel': 'is a top-level comment',
+  'author_karma': "author's karma",
+  'author_age_days': "author's account age (in days)",
+  'author_is_mod': 'is a moderator',
+  'author_is_banned': 'is banned',
+  'post_title': "post's title",
+  'post_body': "post's body",
+  'post_score': "post's score",
+  'post_report_count': "post's report count",
+  'post_is_nsfw': 'is marked NSFW',
+  'comment_body': "comment's body",
+  'comment_score': "comment's score",
+  'comment_report_count': "comment's report count",
+  'comment_is_top_level': 'is a top-level comment',
 };
 
 // Map Operators

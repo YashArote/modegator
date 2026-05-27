@@ -2,7 +2,47 @@ import { reddit, redis } from '@devvit/web/server';
 import { resolvePlaceholders } from '../../shared/placeholders';
 import { appendToLog } from '../storage/logStore';
 import { resolveMacro } from './macroRunner';
+import { evaluateConditions } from './conditionEvaluator';
 import type { ActionBlock, EventContext, ActionLog, ExecOptions } from '../../shared/types';
+
+async function resolveStatePlaceholders(action: ActionBlock) {
+  const update = async (key: keyof ActionBlock) => {
+    if (typeof action[key] === 'string') {
+      let str = action[key] as string;
+      const matches = str.match(/\{\{(counter_[^}]+|custom_[^}]+)\}\}/g);
+      if (matches) {
+        for (const match of matches) {
+          const inner = match.slice(2, -2).trim();
+          if (inner.startsWith('counter_')) {
+            const k = inner.substring(8);
+            const val = await redis.get(`modkit:counter:${k}`);
+            str = str.replace(match, val ? val : '0');
+          } else if (inner.startsWith('custom_')) {
+            const k = inner.substring(7);
+            const val = await redis.get(`modkit:custom:${k}`);
+            str = str.replace(match, val ? val : '');
+          }
+        }
+        (action as any)[key] = str;
+      }
+    }
+  };
+
+  await update('text');
+  await update('reason');
+  await update('mod_note');
+  await update('message');
+  await update('note');
+  await update('to');
+  await update('subject');
+  await update('body');
+  if (action.url && action.url !== 'discord' && action.url !== 'slack') {
+    await update('url');
+  }
+  await update('key');
+  await update('domain');
+  await update('value');
+}
 
 export async function executeActions(
   actions: ActionBlock[],
@@ -25,6 +65,7 @@ export async function executeActions(
     }
 
     const resolved = resolvePlaceholders(action, ctx);
+    await resolveStatePlaceholders(resolved);
 
     const targetId = ctx.post?.id ?? ctx.comment?.id ?? '';
     let targetUrl = '';
@@ -60,14 +101,26 @@ export async function executeActions(
     }
 
     try {
+      if (action.type === 'stop_if') {
+        let shouldStop = true;
+        if (action.conditions && action.conditions.length > 0) {
+           shouldStop = await evaluateConditions(action.conditions, ctx);
+        }
+        
+        if (shouldStop) {
+           console.log(`[ACTION EXECUTOR] stop_if condition met. Halting execution.`);
+           logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
+           break;
+        } else {
+           console.log(`[ACTION EXECUTOR] stop_if condition not met. Continuing execution.`);
+           logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
+           continue;
+        }
+      }
+
       await dispatch(resolved, ctx, opts);
       console.log(`[ACTION EXECUTOR] Successfully executed: ${action.type}`);
       logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
-      
-      // Control flow action
-      if (action.type === 'stop_if') {
-        break;
-      }
     } catch (e) {
       console.error(`[ACTION EXECUTOR] Error executing ${action.type}:`, e);
       logs.push({ action: resolved, status: 'ERROR', error: String(e), timestamp: Date.now(), ...metadata });
@@ -86,23 +139,59 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
 
   switch (action.type) {
     // Post
-    case 'remove_post':     return reddit.remove(ctx.post!.id as any, action.spam ?? false);
-    case 'approve_post':    return reddit.approve(ctx.post!.id as any);
-    case 'lock_post':       return (await reddit.getPostById(ctx.post!.id as any)).lock();
-    case 'unlock_post':     return (await reddit.getPostById(ctx.post!.id as any)).unlock();
-    case 'set_post_flair':
-      return reddit.setPostFlair({ subredditName: sub, postId: ctx.post!.id as any, text: action.flair_text, cssClass: action.flair_css_class });
-    case 'mark_post_nsfw':   return (await reddit.getPostById(ctx.post!.id as any)).markAsNsfw();
-    case 'unmark_post_nsfw': return (await reddit.getPostById(ctx.post!.id as any)).unmarkAsNsfw();
-    case 'mark_post_spoiler':   return (await reddit.getPostById(ctx.post!.id as any)).markAsSpoiler();
-    case 'unmark_post_spoiler': return (await reddit.getPostById(ctx.post!.id as any)).unmarkAsSpoiler();
+    case 'remove_post': {
+      if (!ctx.post?.id) throw new Error("Action 'remove_post' requires a post context");
+      return reddit.remove(ctx.post.id as any, action.spam ?? false);
+    }
+    case 'approve_post': {
+      if (!ctx.post?.id) throw new Error("Action 'approve_post' requires a post context");
+      return reddit.approve(ctx.post.id as any);
+    }
+    case 'lock_post': {
+      if (!ctx.post?.id) throw new Error("Action 'lock_post' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).lock();
+    }
+    case 'unlock_post': {
+      if (!ctx.post?.id) throw new Error("Action 'unlock_post' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).unlock();
+    }
+    case 'set_post_flair': {
+      if (!ctx.post?.id) throw new Error("Action 'set_post_flair' requires a post context");
+      return reddit.setPostFlair({ subredditName: sub, postId: ctx.post.id as any, text: action.flair_text, cssClass: action.flair_css_class });
+    }
+    case 'mark_post_nsfw': {
+      if (!ctx.post?.id) throw new Error("Action 'mark_post_nsfw' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).markAsNsfw();
+    }
+    case 'unmark_post_nsfw': {
+      if (!ctx.post?.id) throw new Error("Action 'unmark_post_nsfw' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).unmarkAsNsfw();
+    }
+    case 'mark_post_spoiler': {
+      if (!ctx.post?.id) throw new Error("Action 'mark_post_spoiler' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).markAsSpoiler();
+    }
+    case 'unmark_post_spoiler': {
+      if (!ctx.post?.id) throw new Error("Action 'unmark_post_spoiler' requires a post context");
+      return (await reddit.getPostById(ctx.post.id as any)).unmarkAsSpoiler();
+    }
 
     // Comment
-    case 'remove_comment':  return reddit.remove(ctx.comment!.id as any, action.spam ?? false);
-    case 'approve_comment': return reddit.approve(ctx.comment!.id as any);
-    case 'lock_comment':    return (await reddit.getCommentById(ctx.comment!.id as any)).lock();
+    case 'remove_comment': {
+      if (!ctx.comment?.id) throw new Error("Action 'remove_comment' requires a comment context");
+      return reddit.remove(ctx.comment.id as any, action.spam ?? false);
+    }
+    case 'approve_comment': {
+      if (!ctx.comment?.id) throw new Error("Action 'approve_comment' requires a comment context");
+      return reddit.approve(ctx.comment.id as any);
+    }
+    case 'lock_comment': {
+      if (!ctx.comment?.id) throw new Error("Action 'lock_comment' requires a comment context");
+      return (await reddit.getCommentById(ctx.comment.id as any)).lock();
+    }
     case 'submit_comment': {
-      const targetId = ctx.post?.id ?? ctx.comment?.id ?? '';
+      const targetId = ctx.post?.id ?? ctx.comment?.id;
+      if (!targetId) throw new Error("Action 'submit_comment' requires a post or comment context");
       const comment = await reddit.submitComment({ id: targetId as any, text: action.text ?? '' });
       if (action.distinguish) {
         const c = await reddit.getCommentById(comment.id as any);
@@ -113,7 +202,8 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     }
 
     // User
-    case 'ban_user':
+    case 'ban_user': {
+      if (!ctx.author?.username) throw new Error("Action 'ban_user' requires an author");
       return reddit.banUser({
         subredditName: sub,
         username: ctx.author.username,
@@ -122,34 +212,58 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
         note: action.mod_note,
         message: action.message,
       });
-    case 'unban_user':     return reddit.unbanUser(ctx.author.username, sub);
-    case 'mute_user':      return reddit.muteUser({ subredditName: sub, username: ctx.author.username });
-    case 'unmute_user':    return reddit.unmuteUser(ctx.author.username, sub);
-    case 'set_user_flair':
+    }
+    case 'unban_user': {
+      if (!ctx.author?.username) throw new Error("Action 'unban_user' requires an author");
+      return reddit.unbanUser(ctx.author.username, sub);
+    }
+    case 'mute_user': {
+      if (!ctx.author?.username) throw new Error("Action 'mute_user' requires an author");
+      return reddit.muteUser({ subredditName: sub, username: ctx.author.username });
+    }
+    case 'unmute_user': {
+      if (!ctx.author?.username) throw new Error("Action 'unmute_user' requires an author");
+      return reddit.unmuteUser(ctx.author.username, sub);
+    }
+    case 'set_user_flair': {
+      if (!ctx.author?.username) throw new Error("Action 'set_user_flair' requires an author");
       return reddit.setUserFlair({ subredditName: sub, username: ctx.author.username, text: action.flair_text ?? '' });
-    case 'clear_user_flair':
+    }
+    case 'clear_user_flair': {
+      if (!ctx.author?.username) throw new Error("Action 'clear_user_flair' requires an author");
       return reddit.removeUserFlair(sub, ctx.author.username);
-    case 'approve_user':   return reddit.approveUser(ctx.author.username, sub);
-    case 'remove_approval': return reddit.removeUser(ctx.author.username, sub);
+    }
+    case 'approve_user': {
+      if (!ctx.author?.username) throw new Error("Action 'approve_user' requires an author");
+      return reddit.approveUser(ctx.author.username, sub);
+    }
+    case 'remove_approval': {
+      if (!ctx.author?.username) throw new Error("Action 'remove_approval' requires an author");
+      return reddit.removeUser(ctx.author.username, sub);
+    }
 
     // Notes
-    case 'add_mod_note':
+    case 'add_mod_note': {
+      if (!ctx.author?.username) throw new Error("Action 'add_mod_note' requires an author");
       return reddit.addModNote({
         subreddit: sub,
         user: ctx.author.username,
         label: action.label as any,
         note: action.note ?? '',
-        redditId: (ctx.post?.id ?? ctx.comment?.id) as any,
+        redditId: ((ctx.post?.id ?? ctx.comment?.id) || undefined) as any,
       });
+    }
 
     // ModMail
-    case 'reply_modmail':
+    case 'reply_modmail': {
+      if (!ctx.modmail?.id) throw new Error("Action 'reply_modmail' requires a modmail context");
       return reddit.modMail.reply({
-        conversationId: ctx.modmail!.id,
+        conversationId: ctx.modmail.id,
         body: action.text ?? '',
         isInternal: action.internal ?? false,
         isAuthorHidden: action.hidden ?? false,
       });
+    }
     case 'send_modmail':
     case 'sendmodmail': {
       const modmailOpts: any = {
@@ -166,8 +280,10 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     }
 
     // Communication
-    case 'send_private_message':
+    case 'send_private_message': {
+      if (!ctx.author?.username && !action.to) throw new Error("Action 'send_private_message' requires a recipient user");
       return reddit.sendPrivateMessage({ to: action.to || ctx.author.username, subject: action.subject ?? '', text: action.body ?? '' });
+    }
 
     case 'send_webhook': {
       const url = action.url === 'discord'
@@ -179,7 +295,10 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
       return fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: action.message }),
+        body: JSON.stringify({ 
+          content: action.message, // Discord format
+          text: action.message      // Slack format
+        }),
       });
     }
 

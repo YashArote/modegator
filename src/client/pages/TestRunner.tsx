@@ -40,7 +40,7 @@ export function TestRunner() {
         </div>
         <div style={{ fontSize: 'var(--r-xs)', color: 'var(--r-text-2)', display: 'flex', justifyContent: 'space-between' }}>
           <span>{targetId ? `Testing against specific ID: ${targetId}` : `Will auto-fetch most recent content for ${triggerType}`}</span>
-          <span><a href="https://developers.reddit.com/docs/scheduler" target="_blank" style={{ color: 'var(--r-text-link)', textDecoration: 'none' }}>Devvit Scheduler Docs</a></span>
+          <span><a href="https://modegator.netlify.app/core-features/scheduled-tasks" target="_blank" style={{ color: 'var(--r-text-link)', textDecoration: 'none' }}>Scheduled Tasks Docs</a></span>
         </div>
       </div>
 

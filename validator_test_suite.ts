@@ -194,6 +194,46 @@ rules:
     trigger: { event: "CommentSubmit" }
 `, false, ["defined multiple times"]);
 
+// =========================================================
+// 8. UI Action Validations
+// =========================================================
+runTest('Valid UI Action with new properties', `
+version: "1"
+name: "UI Action Config"
+macros:
+  - name: "Soft Warn User"
+    actions:
+      - type: "lock_post"
+ui_actions:
+  - name: "Warn Member"
+    label: "Warn Member"
+    location: "comment"
+    for_user_type: "moderator"
+    confirm: true
+    confirm_message: "Are you sure?"
+    run_macro: "Soft Warn User"
+`, true);
+
+runTest('Invalid UI Action confirm type', `
+version: "1"
+name: "UI Action Config"
+ui_actions:
+  - name: "Warn Member"
+    label: "Warn Member"
+    location: "comment"
+    confirm: "yes" # Should be boolean
+`, false, ["'confirm' must be a boolean"]);
+
+runTest('Invalid UI Action for_user_type type', `
+version: "1"
+name: "UI Action Config"
+ui_actions:
+  - name: "Warn Member"
+    label: "Warn Member"
+    location: "comment"
+    for_user_type: 123 # Should be string
+`, false, ["'for_user_type' must be a string"]);
+
 console.log('--------------------------------------------------');
 console.log(`Results: ${passed} passed, ${failed} failed.`);
 if (failed > 0) process.exit(1);

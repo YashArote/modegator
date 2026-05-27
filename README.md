@@ -1,27 +1,28 @@
-## Devvit React Starter
+# Modegator
 
-A starter to build web applications on Reddit's developer platform
+Modegator is an **Advanced Reddit Automation & Moderation Suite** built natively on the Reddit Developer Platform (Devvit). It provides moderators with a powerful, centralized dashboard directly inside Reddit to create highly customized, event-driven automation rules.
 
-- [Devvit](https://developers.reddit.com/): A way to build and deploy immersive games on Reddit
-- [Vite](https://vite.dev/): For compiling the webView
-- [React](https://react.dev/): For UI
-- [Hono](https://hono.dev/): For backend logic
-- [Tailwind](https://tailwindcss.com/): For styles
-- [TypeScript](https://www.typescriptlang.org/): For type safety
+Unlike legacy bot solutions, Modegator requires zero external hosting and runs securely within Reddit's ecosystem. 
 
-## Getting Started
+## 📖 Full Documentation
 
-> Make sure you have Node 22 downloaded on your machine before running!
+For comprehensive guides, tutorials, and configuration references, please visit our official documentation:
+**[https://modegator.netlify.app/](https://modegator.netlify.app/)**
 
-1. Run `npm create devvit@latest --template=react`
-2. Go through the installation wizard. You will need to create a Reddit account and connect it to Reddit developers
-3. Copy the command on the success page into your terminal
+## ✨ Key Features
 
-## Commands
+- **Automated Rules**: An Event-Condition-Action (ECA) engine to automatically react to posts, comments, or ModMails when they meet specific criteria.
+- **Macros**: Collections of predefined moderation actions (e.g., Lock, Remove, Comment) that can be triggered simultaneously.
+- **Custom UI Actions**: Inject custom workflows directly into the native Reddit menu. Moderators can manually execute complex tasks with a single click using the master "🛡️ MG Actions" button.
+- **Scheduled Tasks**: Recurring background jobs that run on a Cron schedule (e.g., sending daily Modmail reports).
+- **Node Visualizer**: Automatically translates complex YAML logic into interactive, easy-to-read graphs..
+- **Live YAML Editor**: A fully-featured IDE built into Reddit, supporting syntax highlighting, templates, instant validation, and multi-file structures.
+- **Test Runner**: Simulate Reddit events against your logic before deploying to production.
 
-- `npm run dev`: Starts a development server where you can develop your application live on Reddit.
-- `npm run build`: Builds your client and server projects
-- `npm run deploy`: Uploads a new version of your app
-- `npm run launch`: Publishes your app for review
-- `npm run login`: Logs your CLI into Reddit
-- `npm run type-check`: Type checks, lints, and prettifies your app
+## 🚀 How to Access
+
+Once Modegator is installed on your subreddit, accessing the centralized dashboard is incredibly simple:
+
+1. Navigate to your subreddit on the official Reddit web or mobile app.
+2. Open the `...` overflow menu on the subreddit header.
+3. Click the **🛡️Open MG Dashboard** button to launch your private, full-screen Mod Portal.
