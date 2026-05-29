@@ -57,6 +57,20 @@ export function replaceStringPlaceholders(str: string, ctx: EventContext): strin
   return replaced;
 }
 
+export function resolveObjectPlaceholders(obj: any, ctx: EventContext): any {
+  if (!obj) return obj;
+  if (typeof obj === 'string') return replaceStringPlaceholders(obj, ctx);
+  if (Array.isArray(obj)) return obj.map(item => resolveObjectPlaceholders(item, ctx));
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = resolveObjectPlaceholders(v, ctx);
+    }
+    return result;
+  }
+  return obj;
+}
+
 export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): ActionBlock {
   const newAction = { ...action };
 
@@ -79,7 +93,15 @@ export function resolvePlaceholders(action: ActionBlock, ctx: EventContext): Act
   }
   update('key');
   update('domain');
+  update('tag');
   update('value');
+
+  if (newAction.headers) {
+    newAction.headers = resolveObjectPlaceholders(newAction.headers, ctx);
+  }
+  if (newAction.payload) {
+    newAction.payload = resolveObjectPlaceholders(newAction.payload, ctx);
+  }
 
   return newAction;
 }

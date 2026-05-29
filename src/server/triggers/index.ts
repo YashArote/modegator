@@ -4,7 +4,7 @@ import { KEYS } from '../storage/keys';
 import { evaluateConditions } from '../engine/conditionEvaluator';
 import { executeActions } from '../engine/actionExecutor';
 import { resolveMacro } from '../engine/macroRunner';
-import { buildContextFromId } from '../engine/testRunner';
+import { buildContextFromId, getAuthorContext } from '../engine/testRunner';
 import type { ModKitConfig, EventContext } from '../../shared/types';
 
 export const triggerRoutes = new Hono();
@@ -38,7 +38,7 @@ async function handleTriggerEvent(c: any, eventName: string) {
   }
 
   let ctx: EventContext;
-  
+
   try {
     if (eventName.startsWith('Post') && event.post?.id) {
       ctx = await buildContextFromId(event.post.id, eventName);
@@ -58,7 +58,7 @@ async function handleTriggerEvent(c: any, eventName: string) {
         try {
           const convo = await reddit.modMail.getConversation({ conversationId: event.conversationId });
           subject = convo.conversation?.subject ?? '';
-          
+
           // Get the body of the most recent message
           if (convo.conversation?.messages) {
             const messages = Object.values(convo.conversation.messages);
@@ -71,10 +71,20 @@ async function handleTriggerEvent(c: any, eventName: string) {
         }
       }
 
+      const modmailAuthorName = event.messageAuthor?.name ?? event.author?.name ?? 'unknown';
+      let authorCtx = { username: modmailAuthorName };
+      if (modmailAuthorName && modmailAuthorName !== 'unknown') {
+        try {
+          authorCtx = await getAuthorContext(modmailAuthorName, subredditName);
+        } catch (e) {
+          console.error('[TRIGGER EVENT] Failed to fetch full author context for ModMail, using minimal context:', e);
+        }
+      }
+
       ctx = {
         type: eventName,
         subredditName,
-        author: { username: event.messageAuthor?.name ?? event.author?.name ?? 'unknown' },
+        author: authorCtx,
         modmail: {
           id: event.conversationId ?? '',
           subject: subject,
@@ -104,7 +114,7 @@ async function handleTriggerEvent(c: any, eventName: string) {
   for (const rule of rules) {
     console.log(`[TRIGGER EVENT] Evaluating rule: "${rule.name}"`);
     const matched = await evaluateConditions(rule.conditions ?? [], ctx);
-    
+
     if (matched) {
       console.log(`[TRIGGER EVENT] Rule "${rule.name}" PASSED. Executing primary actions...`);
       const actions = rule.run_macro ? resolveMacro(rule.run_macro, config) : rule.actions ?? [];

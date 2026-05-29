@@ -120,19 +120,26 @@ rules:
   - name: "Track reported domains"
     trigger:
       event: "PostReport"
-    conditions:
-      - field: "post_report_count"
-        operator: "=="
-        value: 1
     actions:
-      - type: "tag_domain"
-        domain: "{{post_domain}}"
-        label: "Under Review"
+      # Track reports globally
       - type: "increment_counter"
-        key: "reported_domains_count"
-      - type: "store_value"
-        key: "last_reported_domain"
-        value: "{{post_domain}}"
+        key: "post_reports_{{post_id}}"
+        
+      # On the 1st report, tag as Under Review
+      - type: "if"
+        conditions:
+          - field: "counter_post_reports_{{post_id}}"
+            operator: "=="
+            value: 1
+        then:
+          - type: "tag_domain"
+            domain: "{{post_domain}}"
+            tag: "Under Review"
+          - type: "increment_counter"
+            key: "reported_domains_count"
+          - type: "store_value"
+            key: "last_reported_domain"
+            value: "{{post_domain}}"
 
   - name: "Spam domain threshold auto-action"
     trigger:
@@ -144,7 +151,7 @@ rules:
     actions:
       - type: "remove_post"
       - type: "send_webhook"
-        url: "discord"
+        url: "https://discord.com/api/webhooks/your_webhook_id/your_webhook_token"
         message: "Automated Removal: Post with flagged domain {{post_domain}} submitted by {{author}}."
 
   - name: "Query state via comment command"
@@ -184,16 +191,11 @@ ui_actions:
   - name: "Warn Member"
     label: "Warn Member"
     location: "comment"
-    for_user_type: "moderator"
-    confirm: true
-    confirm_message: "Are you sure you want to warn this member?"
     run_macro: "Soft Warn User"
 
   - name: "Quick Lock Post"
     label: "Quick Lock"
     location: "post"
-    for_user_type: "moderator"
-    confirm: false
     actions:
       - type: "lock_post"
       - type: "submit_comment"
@@ -204,9 +206,6 @@ ui_actions:
   - name: "Nuke post"
     label: "Nuke post"
     location: "post"
-    for_user_type: "moderator"
-    confirm: true
-    confirm_message: "Are you sure you want to completely nuke this post?"
     run_macro: "Nuke and Alert Macro"
 
 scheduled:
@@ -214,7 +213,7 @@ scheduled:
     cron: "0 0 * * *"
     actions:
       - type: "send_webhook"
-        url: "slack"
+        url: "https://discord.com/api/webhooks/your_webhook_id/your_webhook_token"
         message: "Daily Mod Check: Total domains flagged today is {{counter_reported_domains_count}}. Resetting counter."
       - type: "send_private_message"
         to: "your_username_here"

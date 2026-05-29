@@ -67,11 +67,16 @@ export interface ConditionBlock {
 
 export interface ActionBlock {
   type: string;
-  
-  // Post Actions
+
+  // Post / User Flair Actions
   spam?: boolean;
   flair_text?: string;
   flair_css_class?: string;
+  /** Flair background color. Use a named color ('red'|'orange'|'yellow'|'green'|'blue'|'gray')
+   *  or a hex string (e.g. '#FF4500'). Maps to backgroundColor on the Reddit flair API. */
+  color?: 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'gray' | (string & {});
+  /** Flair text color. Either 'dark' or 'light'. */
+  text_color?: 'dark' | 'light';
 
   // Comment Actions
   text?: string;
@@ -79,6 +84,7 @@ export interface ActionBlock {
   sticky?: boolean;
 
   // User Actions
+  /** Ban duration in days (1-999). Use 'permanent' or omit for a permanent ban. */
   duration?: number | 'permanent';
   reason?: string;
   mod_note?: string;
@@ -93,6 +99,8 @@ export interface ActionBlock {
   subject?: string;
   body?: string;
   url?: string;
+  headers?: Record<string, string>;
+  payload?: any;
 
   // Mod notes
   label?: 'BOT_BAN' | 'PERMA_BAN' | 'BAN' | 'ABUSE_WARNING' | 'SPAM_WARNING' | 'SPAM_WATCH' | 'SOLID_CONTRIBUTOR' | 'HELPFUL_USER';
@@ -102,12 +110,14 @@ export interface ActionBlock {
   key?: string;
   value?: string;
   domain?: string;
-  color?: 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'gray';
+  tag?: string;
 
   // Flow control & Timing
   macro?: string;
+  // If conditionals
+  conditions?: ConditionBlock[];
+  then?: ActionBlock[];
   duration_ms?: number; // for delay action
-  conditions?: ConditionBlock[]; // for stop_if action
 }
 
 export interface EventContext {
@@ -131,7 +141,6 @@ export interface EventContext {
     domain: string;
     linkType: 'link' | 'self' | string;
     score: number;
-    reportCount: number;
     nsfw: boolean;
     spoiler: boolean;
     flairText: string;
@@ -142,7 +151,6 @@ export interface EventContext {
     postId: string;
     body: string;
     score: number;
-    reportCount: number;
     isTopLevel: boolean;
   };
   modmail?: {

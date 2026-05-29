@@ -9,11 +9,9 @@ const fieldNameMap: Record<string, string> = {
   'post_title': "post's title",
   'post_body': "post's body",
   'post_score': "post's score",
-  'post_report_count': "post's report count",
   'post_is_nsfw': 'is marked NSFW',
   'comment_body': "comment's body",
   'comment_score': "comment's score",
-  'comment_report_count': "comment's report count",
   'comment_is_top_level': 'is a top-level comment',
 };
 
@@ -122,7 +120,7 @@ export function explainAction(action: ActionBlock): string {
     case 'increment_counter':
       return `Increment the custom counter "${action.key}".`;
     case 'tag_domain':
-      return `Tag the domain "${action.domain}" with color "${action.color}".`;
+      return `Tag the domain "${action.domain}" with tag "${action.tag}".`;
     case 'stop_if':
       return 'Stop executing further actions if this point is reached.';
     case 'delay':
@@ -137,7 +135,7 @@ export function explainAction(action: ActionBlock): string {
 // Generate full explanation for a Rule
 export function explainRule(rule: any): string {
   let exp = `When an event triggered by ${rule.trigger?.event || 'Unknown'} occurs`;
-  
+
   if (rule.conditions && rule.conditions.length > 0) {
     const condStr = rule.conditions.map(explainCondition).join(' AND ');
     exp += `, IF ${condStr}`;
@@ -146,7 +144,7 @@ export function explainRule(rule: any): string {
   }
 
   exp += `, THEN `;
-  
+
   if (rule.run_macro) {
     exp += `run the macro "${rule.run_macro}".`;
   } else if (rule.actions && rule.actions.length > 0) {
@@ -164,7 +162,7 @@ export function explainUiAction(action: any): string {
   if (action.confirm) {
     exp += `ask for confirmation ("${action.confirm_message || 'Are you sure?'}") then `;
   }
-  
+
   if (action.run_macro) {
     exp += `run the macro "${action.run_macro}".`;
   } else if (action.actions && action.actions.length > 0) {
@@ -179,7 +177,7 @@ export function explainUiAction(action: any): string {
 // Generate explanation for Scheduled Task
 export function explainScheduledTask(task: any): string {
   let exp = `On schedule "${task.cron}", `;
-  
+
   if (task.run_macro) {
     exp += `run the macro "${task.run_macro}".`;
   } else if (task.actions && task.actions.length > 0) {
@@ -194,7 +192,7 @@ export function explainScheduledTask(task: any): string {
 // Generate explanation for Macro
 export function explainMacro(macroName: string, macro: any): string {
   let exp = `When the macro "${macroName}" is triggered, `;
-  
+
   if (macro.actions && macro.actions.length > 0) {
     exp += macro.actions.map(explainAction).join(' ');
   } else {

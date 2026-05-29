@@ -26,7 +26,7 @@ async function getFieldValue(field: string, ctx: EventContext): Promise<any> {
     case 'author_has_user_flair': return ctx.author.flairText ?? '';
     case 'author_has_mod_note': return ctx.author.hasModNote ?? false;
     case 'author_mod_note_label': return ctx.author.modNoteLabel ?? '';
-    
+
     case 'post_title': return ctx.post?.title ?? '';
     case 'post_body': return ctx.post?.body ?? '';
     case 'post_domain': return ctx.post?.domain ?? '';
@@ -35,23 +35,21 @@ async function getFieldValue(field: string, ctx: EventContext): Promise<any> {
       if (!postDomain) return '';
       try {
         const existing = JSON.parse((await redis.get('modkit:domains')) ?? '{}');
-        return existing[postDomain]?.label ?? '';
+        return existing[postDomain]?.tag ?? '';
       } catch (e) {
         return '';
       }
     }
     case 'post_score': return ctx.post?.score ?? 0;
-    case 'post_report_count': return ctx.post?.reportCount ?? 0;
     case 'post_link_type': return ctx.post?.linkType ?? '';
     case 'post_is_nsfw': return ctx.post?.nsfw ?? false;
     case 'post_is_spoiler': return ctx.post?.spoiler ?? false;
     case 'post_flair_text': return ctx.post?.flairText ?? '';
-    
+
     case 'comment_body': return ctx.comment?.body ?? '';
     case 'comment_score': return ctx.comment?.score ?? 0;
     case 'comment_is_top_level': return ctx.comment?.isTopLevel ?? false;
-    case 'comment_report_count': return ctx.comment?.reportCount ?? 0;
-    
+
     case 'modmail_subject': return ctx.modmail?.subject ?? '';
     case 'modmail_body': return ctx.modmail?.body ?? '';
     case 'modmail_body_length': return ctx.modmail?.body?.length ?? 0;
@@ -76,12 +74,12 @@ async function evaluateLeaf(condition: ConditionBlock, ctx: EventContext): Promi
 
   switch (condition.operator) {
     case '==':
-      passed = isArrayExpected 
+      passed = isArrayExpected
         ? expectedValue.includes(actualValue)
         : actualValue === expectedValue;
       break;
     case '!=':
-      passed = isArrayExpected 
+      passed = isArrayExpected
         ? !expectedValue.includes(actualValue)
         : actualValue !== expectedValue;
       break;
@@ -138,7 +136,7 @@ async function evaluateLeaf(condition: ConditionBlock, ctx: EventContext): Promi
   }
 
   console.log(`[CONDITION EVALUATOR] Evaluated field '${condition.field}' with operator '${condition.operator}' against expected '${expectedValue}'. Actual value was '${actualValue}'. Result: ${passed}`);
-  
+
   return { passed, actualValue };
 }
 
@@ -146,7 +144,7 @@ export async function evaluateConditionsWithDetails(
   conditions: ConditionBlock[],
   ctx: EventContext
 ): Promise<{ passed: boolean; details: ConditionResult[] }> {
-  
+
   if (!conditions || conditions.length === 0) {
     return { passed: true, details: [] };
   }
@@ -161,7 +159,7 @@ export async function evaluateConditionsWithDetails(
       }
       return false;
     }
-    
+
     if (node.all_of) {
       if (node.all_of.length === 0) return true;
       for (const child of node.all_of) {

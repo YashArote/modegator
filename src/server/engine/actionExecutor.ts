@@ -5,6 +5,57 @@ import { resolveMacro } from './macroRunner';
 import { evaluateConditions } from './conditionEvaluator';
 import type { ActionBlock, EventContext, ActionLog, ExecOptions } from '../../shared/types';
 
+/** Maps YAML named colors to hex values accepted by the Reddit flair API. */
+const COLOR_MAP: Record<string, string> = {
+  red:    '#FF585B',
+  orange: '#FF6314',
+  yellow: '#FFD635',
+  green:  '#46D160',
+  blue:   '#0DD3BB',
+  gray:   '#EAEDEF',
+};
+
+/** Resolves an ActionBlock color field to a valid backgroundColor hex string. */
+function resolveFlairColor(color: string | undefined): string | undefined {
+  if (!color) return undefined;
+  if (color.startsWith('#')) return color;          // already a hex value
+  return COLOR_MAP[color.toLowerCase()] ?? undefined;
+}
+
+async function resolveObjectStatePlaceholders(obj: any): Promise<any> {
+  if (!obj) return obj;
+  if (typeof obj === 'string') {
+    let str = obj;
+    const matches = str.match(/\{\{(counter_[^}]+|custom_[^}]+)\}\}/g);
+    if (matches) {
+      for (const match of matches) {
+        const inner = match.slice(2, -2).trim();
+        if (inner.startsWith('counter_')) {
+          const k = inner.substring(8);
+          const val = await redis.get(`modkit:counter:${k}`);
+          str = str.replace(match, val ? val : '0');
+        } else if (inner.startsWith('custom_')) {
+          const k = inner.substring(7);
+          const val = await redis.get(`modkit:custom:${k}`);
+          str = str.replace(match, val ? val : '');
+        }
+      }
+    }
+    return str;
+  }
+  if (Array.isArray(obj)) {
+    return Promise.all(obj.map(item => resolveObjectStatePlaceholders(item)));
+  }
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      result[k] = await resolveObjectStatePlaceholders(v);
+    }
+    return result;
+  }
+  return obj;
+}
+
 async function resolveStatePlaceholders(action: ActionBlock) {
   const update = async (key: keyof ActionBlock) => {
     if (typeof action[key] === 'string') {
@@ -42,6 +93,13 @@ async function resolveStatePlaceholders(action: ActionBlock) {
   await update('key');
   await update('domain');
   await update('value');
+
+  if (action.headers) {
+    action.headers = await resolveObjectStatePlaceholders(action.headers);
+  }
+  if (action.payload) {
+    action.payload = await resolveObjectStatePlaceholders(action.payload);
+  }
 }
 
 export async function executeActions(
@@ -118,6 +176,24 @@ export async function executeActions(
         }
       }
 
+      if (action.type === 'if') {
+        let shouldRun = false;
+        if (action.conditions && action.conditions.length > 0) {
+          shouldRun = await evaluateConditions(action.conditions, ctx);
+        }
+        
+        if (shouldRun && action.then) {
+          console.log(`[ACTION EXECUTOR] if condition met. Executing then block.`);
+          logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
+          const subLogs = await executeActions(action.then, ctx, opts);
+          logs.push(...subLogs);
+        } else {
+          console.log(`[ACTION EXECUTOR] if condition not met. Skipping then block.`);
+          logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
+        }
+        continue;
+      }
+
       await dispatch(resolved, ctx, opts);
       console.log(`[ACTION EXECUTOR] Successfully executed: ${action.type}`);
       logs.push({ action: resolved, status: 'SUCCESS', timestamp: Date.now(), ...metadata });
@@ -157,7 +233,14 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     }
     case 'set_post_flair': {
       if (!ctx.post?.id) throw new Error("Action 'set_post_flair' requires a post context");
-      return reddit.setPostFlair({ subredditName: sub, postId: ctx.post.id as any, text: action.flair_text, cssClass: action.flair_css_class });
+      return reddit.setPostFlair({
+        subredditName: sub,
+        postId: ctx.post.id as any,
+        text: action.flair_text,
+        cssClass: action.flair_css_class,
+        backgroundColor: resolveFlairColor(action.color),
+        textColor: action.text_color as any,
+      });
     }
     case 'mark_post_nsfw': {
       if (!ctx.post?.id) throw new Error("Action 'mark_post_nsfw' requires a post context");
@@ -194,9 +277,8 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
       if (!targetId) throw new Error("Action 'submit_comment' requires a post or comment context");
       const comment = await reddit.submitComment({ id: targetId as any, text: action.text ?? '' });
       if (action.distinguish) {
-        const c = await reddit.getCommentById(comment.id as any);
-        if (action.sticky) await c.distinguish(true);
-        else await c.distinguish(false);
+        // distinguish(makeSticky?) — pass true only when sticky is also requested
+        await comment.distinguish(action.sticky === true);
       }
       return comment;
     }
@@ -204,10 +286,16 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     // User
     case 'ban_user': {
       if (!ctx.author?.username) throw new Error("Action 'ban_user' requires an author");
+      // The Reddit API accepts duration as a number of days (1-999) or undefined for permanent.
+      // YAML 'permanent' string must be stripped; any non-numeric value becomes undefined.
+      const banDuration: number | undefined =
+        (typeof action.duration === 'number' && action.duration > 0)
+          ? action.duration
+          : undefined;
       return reddit.banUser({
         subredditName: sub,
         username: ctx.author.username,
-        duration: action.duration === 'permanent' ? undefined : action.duration,
+        duration: banDuration,
         reason: action.reason,
         note: action.mod_note,
         message: action.message,
@@ -227,7 +315,14 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     }
     case 'set_user_flair': {
       if (!ctx.author?.username) throw new Error("Action 'set_user_flair' requires an author");
-      return reddit.setUserFlair({ subredditName: sub, username: ctx.author.username, text: action.flair_text ?? '' });
+      return reddit.setUserFlair({
+        subredditName: sub,
+        username: ctx.author.username,
+        text: action.flair_text ?? '',
+        cssClass: action.flair_css_class,
+        backgroundColor: resolveFlairColor(action.color),
+        textColor: action.text_color as any,
+      });
     }
     case 'clear_user_flair': {
       if (!ctx.author?.username) throw new Error("Action 'clear_user_flair' requires an author");
@@ -292,13 +387,23 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
         ? opts.config.settings?.slack_webhook_url
         : action.url;
       if (!url) throw new Error('Webhook URL not configured');
+      
+      const fetchHeaders: any = { 'Content-Type': 'application/json' };
+      if (action.headers) {
+        Object.assign(fetchHeaders, action.headers);
+      }
+      
+      const fetchBody = action.payload 
+        ? JSON.stringify(action.payload)
+        : JSON.stringify({ 
+            content: action.message, // Discord format
+            text: action.message      // Slack format
+          });
+
       return fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          content: action.message, // Discord format
-          text: action.message      // Slack format
-        }),
+        headers: fetchHeaders,
+        body: fetchBody,
       });
     }
 
@@ -308,7 +413,7 @@ async function dispatch(action: ActionBlock, ctx: EventContext, opts: ExecOption
     case 'tag_domain': {
       if (!action.domain) return;
       const existing = JSON.parse((await redis.get('modkit:domains')) ?? '{}');
-      existing[action.domain] = { label: action.label, color: action.color };
+      existing[action.domain] = { tag: action.tag };
       return redis.set('modkit:domains', JSON.stringify(existing));
     }
 

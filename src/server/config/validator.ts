@@ -7,13 +7,13 @@ const ALLOWED_ACTIONS = new Set([
   'remove_comment', 'approve_comment', 'lock_comment', 'submit_comment',
   'ban_user', 'unban_user', 'mute_user', 'unmute_user', 'set_user_flair', 'clear_user_flair',
   'approve_user', 'remove_approval', 'add_mod_note', 'reply_modmail', 'send_modmail', 'sendmodmail', 'send_private_message',
-  'send_webhook', 'store_value', 'increment_counter', 'tag_domain', 'stop_if', 'delay', 'run_macro'
+  'send_webhook', 'store_value', 'increment_counter', 'tag_domain', 'stop_if', 'if', 'delay', 'run_macro'
 ]);
 
 const ALLOWED_FIELDS = new Set([
   'author_name', 'author_karma', 'author_age_days', 'author_is_banned', 'author_is_mod', 'author_is_approved', 'author_has_user_flair', 'author_has_mod_note', 'author_mod_note_label',
-  'post_title', 'post_body', 'post_domain', 'post_domain_tag', 'post_score', 'post_report_count', 'post_link_type', 'post_is_nsfw', 'post_is_spoiler', 'post_flair_text',
-  'comment_body', 'comment_score', 'comment_is_top_level', 'comment_report_count', 'modmail_subject', 'modmail_body', 'modmail_body_length'
+  'post_title', 'post_body', 'post_domain', 'post_domain_tag', 'post_score', 'post_link_type', 'post_is_nsfw', 'post_is_spoiler', 'post_flair_text',
+  'comment_body', 'comment_score', 'comment_is_top_level', 'modmail_subject', 'modmail_body', 'modmail_body_length'
 ]);
 
 const FIELD_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
@@ -31,7 +31,6 @@ const FIELD_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
   'post_domain': 'string',
   'post_domain_tag': 'string',
   'post_score': 'number',
-  'post_report_count': 'number',
   'post_link_type': 'string',
   'post_is_nsfw': 'boolean',
   'post_is_spoiler': 'boolean',
@@ -39,7 +38,6 @@ const FIELD_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
   'comment_body': 'string',
   'comment_score': 'number',
   'comment_is_top_level': 'boolean',
-  'comment_report_count': 'number',
   'modmail_subject': 'string',
   'modmail_body': 'string',
   'modmail_body_length': 'number'
@@ -54,7 +52,7 @@ const ALLOWED_CONDITION_KEYS = new Set(['any_of', 'all_of', 'none_of', 'field', 
 const ALLOWED_ACTION_KEYS = new Set([
   'type', 'spam', 'flair_text', 'flair_css_class', 'text', 'distinguish', 'sticky',
   'duration', 'reason', 'mod_note', 'message', 'label', 'note', 'internal', 'hidden',
-  'to', 'subject', 'body', 'url', 'key', 'value', 'domain', 'color', 'macro', 'duration_ms', 'conditions'
+  'to', 'subject', 'body', 'url', 'key', 'value', 'domain', 'tag', 'color', 'text_color', 'macro', 'duration_ms', 'conditions', 'then', 'headers', 'payload'
 ]);
 
 const ALLOWED_OPERATORS = new Set(['==', '!=', '<', '<=', '>', '>=', 'contains', 'regex']);
@@ -81,7 +79,9 @@ const ACTION_PROPERTY_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
   'key': 'string',
   'value': 'string',
   'domain': 'string',
+  'tag': 'string',
   'color': 'string',
+  'text_color': 'string',
   'macro': 'string',
   'duration_ms': 'number'
 };
@@ -122,7 +122,7 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
       return;
     }
     validateKeys(action, ALLOWED_ACTION_KEYS, prefix);
-    
+
     // Type check action properties
     for (const [key, expectedType] of Object.entries(ACTION_PROPERTY_TYPES)) {
       if (action[key] !== undefined) {
@@ -151,18 +151,35 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
         errors.push(`${prefix}: 'add_mod_note' requires 'label' to be one of: ${validLabels.join(', ')}`);
       }
     }
-    if (action.type === 'tag_domain') {
-      const validColors = ['red', 'orange', 'yellow', 'green', 'blue', 'gray'];
-      if (action.color && !validColors.includes(action.color)) {
-        errors.push(`${prefix}: 'tag_domain' color must be one of: ${validColors.join(', ')}`);
-      }
-    }
     if (action.type === 'stop_if' && action.conditions) {
       if (!Array.isArray(action.conditions)) {
         errors.push(`${prefix}: 'stop_if' action conditions must be an array`);
       } else {
         action.conditions.forEach((c: any, ci: number) => validateCondition(c, `${prefix}.conditions[${ci}]`));
       }
+    }
+    if (action.type === 'if') {
+      if (!action.conditions || !Array.isArray(action.conditions)) {
+        errors.push(`${prefix}: 'if' action requires 'conditions' array`);
+      } else {
+        action.conditions.forEach((c: any, ci: number) => validateCondition(c, `${prefix}.conditions[${ci}]`));
+      }
+      if (!action.then || !Array.isArray(action.then)) {
+        errors.push(`${prefix}: 'if' action requires 'then' block of actions`);
+      } else {
+        action.then.forEach((a: any, ai: number) => validateAction(a, `${prefix}.then[${ai}]`));
+      }
+    }
+    if (action.text_color !== undefined) {
+      if (action.text_color !== 'dark' && action.text_color !== 'light') {
+        errors.push(`${prefix}: 'text_color' must be either 'dark' or 'light'`);
+      }
+    }
+    if (action.headers !== undefined && (typeof action.headers !== 'object' || Array.isArray(action.headers))) {
+      errors.push(`${prefix}: 'headers' must be an object`);
+    }
+    if (action.payload !== undefined && (typeof action.payload !== 'object' || Array.isArray(action.payload))) {
+      errors.push(`${prefix}: 'payload' must be an object`);
     }
   }
 
@@ -319,7 +336,7 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
             seenNames.ui_actions.add(action.name);
             merged.ui_actions.push(action);
           }
-          
+
           if (action.location && !['post', 'comment', 'subreddit'].includes(action.location)) {
             errors.push(`${prefix}: 'location' must be one of: 'post', 'comment', 'subreddit'`);
           }
@@ -415,6 +432,18 @@ export function validateAndMergeFiles(files: Record<string, string>): { valid: b
       if (a.type === 'run_macro' && a.macro) {
         if (!seenNames.macros.has(a.macro)) {
           errors.push(`${prefix}[${i}]: Macro "${a.macro}" is referenced but never defined.`);
+        }
+      }
+      if (a.type === 'if') {
+        if (!a.conditions || !Array.isArray(a.conditions)) {
+          errors.push(`${prefix}[${i}]: 'if' action requires 'conditions' array`);
+        } else {
+          a.conditions.forEach((c: any, ci: number) => validateCondition(c, `${prefix}[${i}].conditions[${ci}]`));
+        }
+        if (!a.then || !Array.isArray(a.then)) {
+          errors.push(`${prefix}[${i}]: 'if' action requires 'then' block of actions`);
+        } else {
+          validateMacroReferences(a.then, `${prefix}[${i}].then`);
         }
       }
     }
