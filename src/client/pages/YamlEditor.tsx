@@ -300,12 +300,23 @@ export function YamlEditor() {
         </div>
       </div>
 
-      {errors.length > 0 && (
-        <div className="card" style={{ background: 'var(--r-danger-bg)', marginBottom: 0, animation: 'fadeIn 0.2s' }}>
-          <div className="section-label" style={{ color: 'var(--r-danger-text)' }}>Validation Errors</div>
-          {errors.map((e, i) => <div key={i} className="error-text">! {e}</div>)}
-        </div>
-      )}
+      {errors.length > 0 && (() => {
+        const toCanonical = (n: string) =>
+          n.toLowerCase().replace(/\.yml$/i, '').replace(/[^a-z0-9]/g, '_') + '.yml';
+        const defaultCanonicals = new Set(Object.keys(templates).map(toCanonical));
+        const activeIsDefault = defaultCanonicals.has(toCanonical(activeId));
+        return (
+          <div className="card" style={{ background: 'var(--r-danger-bg)', marginBottom: 0, animation: 'fadeIn 0.2s' }}>
+            <div className="section-label" style={{ color: 'var(--r-danger-text)' }}>Validation Errors</div>
+            {errors.map((e, i) => <div key={i} className="error-text">! {e}</div>)}
+            {activeIsDefault && (
+              <div style={{ marginTop: '10px', padding: '8px 10px', background: 'var(--r-bg-3)', borderRadius: '6px', borderLeft: '3px solid var(--r-brand)', fontSize: 'var(--r-sm)', color: 'var(--r-text-2)', lineHeight: 1.5 }}>
+                <strong style={{ color: 'var(--r-text)' }}>💡 Tip:</strong> This is a built-in template file. Templates may be updated after the app is installed — try reloading it from the <strong>Load Template...</strong> dropdown above to get the latest version.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div style={{ display: 'flex', flex: 1, gap: '16px', minHeight: '500px' }}>
 
